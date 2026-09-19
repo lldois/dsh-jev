@@ -1,0 +1,6 @@
+# dsh-jev bundle patch
+# Registers the TypeSafe Jev plugin in DeepSeek Harness
+- insert:
+    - id: jev
+      name: 'dsh-jev'
+
