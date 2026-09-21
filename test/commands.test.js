@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { registerJevCommands, executeJevCommand } from "../lib/commands.js";
 import { AutoController, installAutoHook } from "../lib/auto.js";
 
-test("commands: /jev status and help return proper text", async () => {
+test("commands: /jev status and help return proper text with headline summaries", async () => {
   let registeredDef = null;
   const fakeCtx = {
     commands: {
@@ -33,7 +33,7 @@ test("commands: /jev status and help return proper text", async () => {
   // Test status
   const statusRes = await registeredDef.handler({ rawInput: "status" });
   assert.equal(statusRes.kind, "success");
-  assert.match(statusRes.text, /TypeSafe Jev System One Status/);
+  assert.match(statusRes.text, /\[Jev Status\] Ready/);
   assert.match(statusRes.text, /Configured: Yes/);
   assert.match(statusRes.text, /Session Requests: 5/);
   assert.match(statusRes.text, /Auto Mode: OFF/);
@@ -41,25 +41,25 @@ test("commands: /jev status and help return proper text", async () => {
   // Test help
   const helpRes = await registeredDef.handler({ rawInput: "help" });
   assert.equal(helpRes.kind, "success");
-  assert.match(helpRes.text, /Available options:/);
+  assert.match(helpRes.text, /\[Jev Help\]/);
   assert.match(helpRes.text, /\/jev status/);
   assert.match(helpRes.text, /\/jev test/);
 
   // Test auto toggle
   const autoOn = await registeredDef.handler({ rawInput: "auto on" });
   assert.equal(autoOn.kind, "success");
-  assert.match(autoOn.text, /Auto Mode enabled/);
+  assert.match(autoOn.text, /\[Jev Auto\] Enabled/);
   assert.equal(autoController.enabled, true);
 
   const autoOff = await registeredDef.handler({ rawInput: "auto off" });
   assert.equal(autoOff.kind, "success");
-  assert.match(autoOff.text, /Auto Mode disabled/);
+  assert.match(autoOff.text, /\[Jev Auto\] Disabled/);
   assert.equal(autoController.enabled, false);
 
   // Test invalid subcommand
   const errRes = await registeredDef.handler({ rawInput: "unknown_cmd" });
   assert.equal(errRes.kind, "error");
-  assert.match(errRes.text, /Unknown command/);
+  assert.match(errRes.text, /\[Jev Error\] Unknown command/);
 });
 
 test("commands: direct execution and pre-step prompt interception for blank session", async () => {
@@ -75,7 +75,7 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   // Test direct executeJevCommand with leading slash or without
   const res1 = await executeJevCommand("/jev status", { jevClient: mockClient, autoController });
   assert.equal(res1.kind, "success");
-  assert.match(res1.text, /TypeSafe Jev System One Status/);
+  assert.match(res1.text, /\[Jev Status\]/);
 
   // Test pre-step hook intercepting /jev command in user message
   let hookHandler = null;
@@ -108,5 +108,5 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   assert.equal(intercepted.messages.length, 2);
   const reminder = intercepted.messages[1];
   assert.equal(reminder.source.kind, "jev-command-interceptor");
-  assert.match(reminder.content[0].text, /TypeSafe Jev System One Status/);
+  assert.match(reminder.content[0].text, /\[Jev Status\]/);
 });
