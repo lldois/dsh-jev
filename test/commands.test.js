@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { registerJevCommands, executeJevCommand, resolveSubcommand } from "../lib/commands.js";
-import { AutoController, installAutoHook, persistSettingsToFile, loadPersistedSettings } from "../lib/auto.js";
+import { AutoController, installAutoHook, persistSettingsToFile, loadPersistedSettings, extractLatestUserPrompt } from "../lib/auto.js";
 
 test("commands: resolveSubcommand handles aliases, case, and typos", () => {
   assert.equal(resolveSubcommand("stat").resolved, "status");
@@ -117,7 +117,12 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   assert.equal(res2.kind, "success");
   assert.match(res2.text, /\[Jev Status\]/);
 
-  // Test pre-step hook intercepting /jev command in user message
+  // Test extractLatestUserPrompt across various message formats
+  assert.equal(extractLatestUserPrompt([{ role: "user", content: [{ type: "text", text: "  /jev status  " }] }]), "/jev status");
+  assert.equal(extractLatestUserPrompt([{ role: "user", content: "/jev test" }]), "/jev test");
+  assert.equal(extractLatestUserPrompt(["/jev skills"]), "/jev skills");
+
+  // Test pre-step hook intercepting /jev command with session event append & step reject
   let hookHandler = null;
   const fakeCtx = {
     on: (evt, fn) => {
@@ -128,27 +133,37 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   installAutoHook(fakeCtx, mockClient, autoController);
   assert.ok(hookHandler);
 
+  const sessionAppends = [];
+  const fakeAgent = {
+    session: {
+      append: (type, data) => sessionAppends.push({ type, data })
+    }
+  };
+
   const initialDecision = {
     kind: "enter",
     messages: [
       {
         role: "user",
-        source: { kind: "user" },
         content: [{ type: "text", text: "/jev status" }]
       }
     ]
   };
 
   const intercepted = await hookHandler(
-    { agent: {}, messages: initialDecision.messages, signal: new AbortController().signal },
+    { agent: fakeAgent, messages: initialDecision.messages, signal: new AbortController().signal },
     async () => initialDecision
   );
 
-  assert.equal(intercepted.kind, "enter");
-  assert.equal(intercepted.messages.length, 2);
-  const reminder = intercepted.messages[1];
-  assert.equal(reminder.source.kind, "jev-command-interceptor");
-  assert.match(reminder.content[0].text, /\[Jev Status\]/);
+  // The step should be rejected to prevent LLM execution
+  assert.equal(intercepted.kind, "reject");
+  // And the session should have received command/run and command/done events
+  assert.equal(sessionAppends.length, 2);
+  assert.equal(sessionAppends[0].type, "command/run");
+  assert.equal(sessionAppends[0].data.name, "jev");
+  assert.equal(sessionAppends[1].type, "command/done");
+  assert.equal(sessionAppends[1].data.kind, "success");
+  assert.match(sessionAppends[1].data.text, /\[Jev Status\]/);
 });
 
 test("auto: /jev auto persists configuration to storage and survives reloads", async () => {
