@@ -121,6 +121,12 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   assert.equal(extractLatestUserPrompt([{ role: "user", content: [{ type: "text", text: "  /jev status  " }] }]), "/jev status");
   assert.equal(extractLatestUserPrompt([{ role: "user", content: "/jev test" }]), "/jev test");
   assert.equal(extractLatestUserPrompt(["/jev skills"]), "/jev skills");
+  // Test extracting prompt when message list is polluted with system-reminder or plugin context
+  assert.equal(extractLatestUserPrompt([
+    { role: "user", source: { kind: "user" }, content: [{ type: "text", text: "/jev status" }] },
+    { role: "user", source: { kind: "agent-instructions" }, content: [{ type: "text", text: "<system-reminder> AGENTS.md" }] },
+    { role: "user", source: { kind: "plugin" }, content: [{ type: "text", text: "Current runtime context" }] }
+  ]), "/jev status");
 
   // Test pre-step hook intercepting /jev command with session event append & step reject
   let hookHandler = null;
