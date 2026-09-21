@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as fs from "node:fs";
 import { registerJevCommands, executeJevCommand, resolveSubcommand } from "../lib/commands.js";
-import { AutoController, installAutoHook } from "../lib/auto.js";
+import { AutoController, installAutoHook, persistSettingsToFile, loadPersistedSettings } from "../lib/auto.js";
 
 test("commands: resolveSubcommand handles aliases, case, and typos", () => {
   assert.equal(resolveSubcommand("stat").resolved, "status");
@@ -146,4 +149,50 @@ test("commands: direct execution and pre-step prompt interception for blank sess
   const reminder = intercepted.messages[1];
   assert.equal(reminder.source.kind, "jev-command-interceptor");
   assert.match(reminder.content[0].text, /\[Jev Status\]/);
+});
+
+test("auto: /jev auto persists configuration to storage and survives reloads", async () => {
+  const tmpDir = path.join(os.tmpdir(), "dsh-jev-test-" + Date.now());
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpSettings = path.join(tmpDir, "settings.yaml");
+  fs.writeFileSync(tmpSettings, "ui-theme:\n  preference: system\n", "utf8");
+
+  let hookPersisted = null;
+  const autoController = new AutoController({
+    enabled: false,
+    settingsPath: tmpSettings,
+    persist: async (val) => {
+      hookPersisted = val;
+    }
+  });
+
+  assert.equal(autoController.enabled, false);
+
+  // Enable and verify persistence
+  await autoController.setPersistedEnabled(true);
+  assert.equal(autoController.enabled, true);
+  assert.equal(hookPersisted, true);
+
+  const loaded = loadPersistedSettings(tmpSettings);
+  assert.equal(loaded?.auto, true);
+
+  // New controller reading from persisted file
+  const reloadedController = new AutoController({
+    settingsPath: tmpSettings
+  });
+  assert.equal(reloadedController.enabled, true);
+
+  // Disable and verify persistence
+  await reloadedController.setPersistedEnabled(false);
+  assert.equal(reloadedController.enabled, false);
+
+  const reloadedController2 = new AutoController({
+    settingsPath: tmpSettings
+  });
+  assert.equal(reloadedController2.enabled, false);
+
+  // Cleanup tmp dir
+  try {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
 });
